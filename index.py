@@ -1,5 +1,5 @@
 from app import  app
-from utils.db import db
+from sierra_madre_core.models.abstract_models import db
 from flask_migrate import Migrate
 
 import os
@@ -27,4 +27,9 @@ if __name__ == "__main__":
     if host is None:
         host = '127.0.0.1'
 
-    app.run(debug=True, host=host,port=5001)
+    app.run(
+        host="0.0.0.0",
+        port=5001,
+        ssl_context=("certs/localhost.pem", "certs/localhost-key.pem"),
+        debug=True
+    )

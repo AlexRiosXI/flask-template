@@ -5,7 +5,7 @@ __pycache__/
 *.key
 # C extensions
 *.so
-
+*.pem
 
 #sock server
 *.sock

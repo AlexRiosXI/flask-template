@@ -1,0 +1,150 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## AI Code Generation Workflow
+
+1. **Create Schema**
+   - Define the schema class in `schemas/<domain>/`, extending `BaseSchema` from the `sierra_madre_core.schemas` module.
+   - Its based on pydantic v2
+   - Example:
+     ```python
+    from typing import Annotated
+    from sierra_madre_core.schemas import BaseModel, Field, EmailStr
+
+    class User(BaseModel):
+        username: Annotated[str, Field(min_length=3, max_length=20)]
+        age: Annotated[int, Field(gt=0, lt=150)]
+        email: EmailStr
+     ```
+   - If the file does not exist, create it.
+
+2. **Create Database Model**
+   - Define the model in `models/<domain>/` using one of the following base classes:
+     - From `sierra_madre_core.models.abstract_models`:  
+       `Model`, `ModelTimeStamp`, `ModelTimeStampSoftDelete`
+     - From `sierra_madre_auth.abstract_models`:  
+       `UserModel`, `UserModelTimeStamp`, `UserModelTimeStampSoftDelete`
+   - Use SQLAlchemy fields via `db.Column(...)` and define `__tablename__`.
+   - Include `__init__` and `__repr__` methods if needed.
+   - Example:
+     ```python
+     from sierra_madre_auth.abstract_models import UserModelTimeStampSoftDelete
+     from sierra_madre_core.models.abstract_models import db
+
+     class Client(UserModelTimeStampSoftDelete):
+         __tablename__ = 'clients'
+         id = db.Column(db.Integer, primary_key=True)
+         name = db.Column(db.String(255), nullable=False)
+         email = db.Column(db.String(255), nullable=True)
+
+         def __init__(self, name, email=None):
+             self.name = name
+             self.email = email
+
+         def __repr__(self):
+             return f"<Client {self.name}>"
+     ```
+
+3. **Create Route**
+   - In `routes/<domain>/`, define a Blueprint and register endpoints on it.
+   - If the blueprint does not exist, create it:
+     ```python
+     from flask import Blueprint
+     from config.auth import auth_config
+
+     clients = Blueprint('clients', __name__)
+     ```
+   - Define routes with methods and secure decorators:
+     ```python
+     @clients.route('/clients', methods=['POST'])
+     @auth_config.handle_secure_endpoint()
+     def create_client():
+         return create_client_handler()
+     ```
+
+4. **Create Handler**
+   - Define the handler function in `handlers/<domain>/`.
+   - It must:
+     - Extract and validate the request using the correct schema.
+     - Call the corresponding service with validated data.
+     - Return a proper response (usually `jsonify(...)` or a helper).
+   - Example:
+     ```python
+     from flask import request
+     from schemas.clients import CreateClientRequest
+     from services.clients import create_client_service
+
+     def create_client_handler():
+         data = CreateClientRequest().load(request.json)
+         result = create_client_service(data)
+         return result  # should be a JSON response
+     ```
+
+5. **Create Service**
+   - Place business logic in `services/<domain>/`.
+   - Services handle:
+     - DB operations using your abstracted models.
+     - Any processing, filtering, or validation beyond schema-level.
+   - Handlers should delegate everything to services.
+6. **Create Bruno Endpoint (Declarative Test Block)**
+
+- In the `bruno/<domain>/` folder (or wherever Bruno endpoints are stored), create a `.bru` file or a declarative block that describes the HTTP operation.
+
+- Follow this structure:
+
+```bruno
+meta {
+  name: Update Modality
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{base_url}}/modalities/1
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Presencial Actualizado",
+    "description": "Modalidad de clases presenciales actualizada"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  name: Update Modality
+  description: Update an existing modality by ID
+}
+
+```
+## Notes
+- Always check if folders and files exist—create them if not.
+- Follow domain-based structure and naming consistency.
+- Use your SDKs (`sierra_madre_core`, `sierra_madre_auth`) instead of raw implementations.
+- Add inline comments and docstrings where relevant.
+
+
+
+###  Error Handling
+
+- **Do not include any `try/except` blocks in your code.**
+- The project has a global error handler that captures all exceptions raised from handlers and services.
+- To stop execution or signal an error, simply **raise an `HttpError`** (or another controlled exception from the system).
+
+This keeps the code clean, avoids duplication, and centralizes error logic.
+
+#### Example (Correct Usage):
+
+```python
+from utils.exceptions import HttpError
+
+if not resource:
+    raise HttpError("Resource not found", status_code=404)
+```

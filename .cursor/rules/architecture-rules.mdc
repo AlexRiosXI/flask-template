@@ -1,0 +1,108 @@
+---
+description: 
+globs: *.py
+alwaysApply: false
+---
+1. **Layered Structure**: The main structure is divided into `services/`, `handlers/`, `routes/`, `models/`, and `schemas/` folders.
+
+2. **Domain per Layer**: Inside each of these folders, subfolders are created for each domain (e.g., `services/users/`, `handlers/users/`, etc.).
+
+3. **Use of SDKs**: All database access must use the "Sierra Madre Core" SDK instead of interacting directly with SQLAlchemy. Authentication must be handled using the "Sierra Madre Auth" SDK.
+
+4. **Validation and Conversion**: Before creating a model, input data must be validated using the schemas defined in `schemas/`.
+
+5. **Naming Consistency**: The naming of routes, functions, and files must follow the same convention as existing elements in each domain.
+
+6. **Documentation**: Every new generated endpoint must include comments that explain its purpose, expected parameters, and responses.
+
+7. **Service Reuse**: Whenever possible, business logic should be implemented in the `services/` layer to allow reuse across multiple handlers.
+
+8. **Pagination** : must use from sierra_madre_core.models.utils import paginate_query function for items pagination
+
+9. **Error Handling** : dont use try, except blocks, global handler already handles all exceptions
+
+10. **Request Errors**: if you want to stop the execution of a function a HttpError Exception must be raised
+
+###  Pagination Guidelines
+
+- Always use the built-in `paginate_query` function from the SDK:
+  ```python
+  from sierra_madre_core.models.utils import paginate_query
+  ```
+
+- This function automatically handles `page` and `per_page` parameters from the request (no need to extract them manually).
+
+####  Example (Recommended Pattern):
+
+```python
+from sierra_madre_core.models.utils import paginate_query
+from models.example import ExampleModel
+from flask import jsonify
+
+def list_examples_service():
+    query = db.session.query(ExampleModel)
+    items, total_pages, total_items = paginate_query(query)
+
+    return jsonify({
+        "items": items,
+        "total_pages": total_pages,
+        "total_items": total_items
+    })
+```
+
+- `items` is a list of serialized records (if `.to_dict()` is defined in the model).
+- The result is ready to return from a service or handler.
+
+ You can also apply filters to the `query` before calling `paginate_query()`, as long as you preserve the SQLAlchemy Query object.
+
+
+###  Model Persistence & Serialization
+
+- Always use the built-in methods from the abstract model base classes (`Model`, `ModelTimeStamp`, etc.) provided by the SDK.
+- **Do NOT use `db.session.add()` or `db.session.commit()` directly**. The SDK handles session management internally.
+
+####  Correct Usage
+
+```python
+modality = Modality(
+    name=data['name'].strip(),
+    description=data.get('description')
+)
+
+# Save to DB
+modality.save()
+
+# Return JSON response
+return modality.json()
+```
+
+####  Avoid This
+
+```python
+db.session.add(modality)
+db.session.commit()
+```
+- The `.save()`, `.update()`, `.delete()`, and `.json()` methods are already available through the SDK’s abstract base models.
+- These methods ensure consistent behavior, audit trails, and simplified syntax.
+
+
+###  Route Parameter Convention
+
+- **Do NOT use path parameters like `/resource/<id>`**.
+- All parameters must be passed via **query strings** (e.g., `/resource?id=123`).
+
+####  Correct Example
+
+```http
+GET /modalities?id=1
+```
+
+####  Avoid This
+
+```http
+GET /modalities/1
+```
+
+- This convention ensures consistency and simplifies request parsing across all endpoints.
+- Handlers should access parameters using `request.args.get("id")` instead of function arguments.
+
